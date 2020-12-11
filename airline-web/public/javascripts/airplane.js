@@ -126,6 +126,7 @@ function updateAirplaneModelTable(sortProperty, sortOrder) {
 		row.append("<div class='cell' align='right'>" + modelOwnerInfo.fuelBurn + "</div>")
 		row.append("<div class='cell' align='right'>" + modelOwnerInfo.lifespan / 52 + " yrs</div>")
 		row.append("<div class='cell' align='right'>" + modelOwnerInfo.speed + " km/h</div>")
+		row.append("<div class='cell' align='right'>" + modelOwnerInfo.runwayRequirement + " m</div>")
 		row.append("<div class='cell' align='right'>" + modelOwnerInfo.assignedAirplanes.length + "/" + modelOwnerInfo.availableAirplanes.length + "/" + modelOwnerInfo.constructingAirplanes.length + "</div>")
 
 		
@@ -475,7 +476,7 @@ function updateModelInfo(modelId) {
 	$('#airplaneModelDetails .modelFamily').text(model.family)
 	$('#airplaneModelDetails #capacity').text(model.capacity)
 	$('#airplaneModelDetails #airplaneType').text(model.airplaneType)
-	$('#airplaneModelDetails #minAirportSize').text(model.minAirportSize)
+	$('#airplaneModelDetails .runwayRequirement').text(model.runwayRequirement)
 	$('#airplaneModelDetails #fuelBurn').text(model.fuelBurn)
 	$('#airplaneModelDetails #range').text(model.range + "km")
 	$('#airplaneModelDetails #speed').text(model.speed + "km/h")
@@ -526,7 +527,7 @@ function selectAirplaneModel(model) {
 	$('#airplaneCanvas .modelFamily').text(model.family)
 	$('#airplaneCanvas #capacity').text(model.capacity)
 	$('#airplaneCanvas #airplaneType').text(model.airplaneType)
-	$('#airplaneCanvas #minAirportSize').text(model.minAirportSize)
+	$('#airplaneCanvas .runwayRequirement').text(model.runwayRequirement)
 	$('#airplaneCanvas #fuelBurn').text(model.fuelBurn)
 	$('#airplaneCanvas #range').text(model.range + " km")
 	$('#airplaneCanvas #speed').text(model.speed + " km/h")

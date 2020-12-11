@@ -1,6 +1,6 @@
 package com.patson.model
 
-import com.patson.data.CountrySource
+import com.patson.data.{CountrySource, CycleSource, DelegateSource}
 
 import scala.collection.mutable
 
@@ -29,7 +29,11 @@ object AirlineCountryRelationship {
         case -3 => "In Conflict"
         case _ => "War"
       }
-      s"Relationship between your home country ${homeCountry.name} and ${targetCountry.name} : ${relationshipString}"
+      if (homeCountry.countryCode == targetCountry.countryCode) {
+        s"Your home country ${homeCountry.name}"
+      } else {
+        s"Relationship between your home country ${homeCountry.name} and ${targetCountry.name} : ${relationshipString}"
+      }
     }
   }
 
@@ -46,59 +50,73 @@ object AirlineCountryRelationship {
     }
   }
 
-  val DELEGATE = (delegateCount : Int) => new RelationshipFactor {
+  val DELEGATE = (delegateLevel : Int) => new RelationshipFactor {
     override val getDescription: String = {
-      s"${delegateCount} assigned delegate(s)"
+      s"Total delegate level ${delegateLevel}"
     }
   }
 
-  val HOME_COUNTRY_RELATIONSHIP_MULTIPLIER = 5
+  val HOME_COUNTRY_POSITIVE_RELATIONSHIP_MULTIPLIER = 5
+  val HOME_COUNTRY_NEGATIVE_RELATIONSHIP_MULTIPLIER = 15
+
   def getAirlineCountryRelationship(countryCode : String, airline : Airline) : AirlineCountryRelationship = {
-    val factors = mutable.HashMap[RelationshipFactor, Int]()
+    val factors = mutable.LinkedHashMap[RelationshipFactor, Int]()
     val targetCountry = countryMap(countryCode)
+
     airline.getCountryCode() match {
-      case Some(homeCountryCode ) =>
+      case Some(homeCountryCode) =>
         val relationship = countryRelationships.getOrElse((homeCountryCode, countryCode), 0)
-        factors.put(HOME_COUNTRY(countryMap(homeCountryCode), targetCountry, relationship), relationship * HOME_COUNTRY_RELATIONSHIP_MULTIPLIER)
+        val multiplier = if (relationship >= 0) HOME_COUNTRY_POSITIVE_RELATIONSHIP_MULTIPLIER else HOME_COUNTRY_NEGATIVE_RELATIONSHIP_MULTIPLIER
+        factors.put(HOME_COUNTRY(countryMap(homeCountryCode), targetCountry, relationship), relationship * multiplier)
+
+        CountrySource.loadCountryAirlineTitlesByAirlineAndCountry(airline.id, countryCode).foreach {
+          title => {
+            val relationshipBonus = Title.relationshipBonus(title.title)
+            factors.put(TITLE(title), relationshipBonus)
+          }
+        }
+
+        CountrySource.loadMarketSharesByCountryCode(countryCode).foreach {
+          marketShares => {
+            marketShares.airlineShares.get(airline.id).foreach {
+              marketShareOfThisAirline => {
+                var percentage = BigDecimal(marketShareOfThisAirline.toDouble / marketShares.airlineShares.values.sum * 100)
+                percentage = percentage.setScale(2, BigDecimal.RoundingMode.HALF_UP)
+                val relationshipBonus : Int = percentage match {
+                  case x if x >= 50 => 40
+                  case x if x >= 25 => 30
+                  case x if x >= 10 => 25
+                  case x if x >= 5 => 20
+                  case x if x >= 2 => 15
+                  case x if x >= 1 => 10
+                  case x if x >= 0.5 => 8
+                  case x if x >= 0.1 => 6
+                  case x if x >= 0.02 => (x * 50).toInt
+                  case _ => 1
+                }
+                factors.put(MARKET_SHARE(percentage), relationshipBonus)
+              }
+            }
+          }
+        }
+        val currentCycle = CycleSource.loadCycle()
+        val totalLevel : Int = DelegateSource.loadCountryDelegateByAirlineAndCountry(airline.id, countryCode).map(_.assignedTask.asInstanceOf[CountryDelegateTask].level(currentCycle)).sum
+
+
+        val levelMultiplier = getDelegateBonusMultiplier(targetCountry)
+        factors.put(DELEGATE(totalLevel), Math.round(totalLevel * levelMultiplier).toInt)
+
       case None =>
     }
 
-    CountrySource.loadCountryAirlineTitlesByAirlineAndCountry(airline.id, countryCode).foreach {
-      title => {
-        val relationshipBonus = title.title match {
-          case Title.NATIONAL_AIRLINE => 50
-          case Title.PARTNERED_AIRLINE => 20
-        }
-        factors.put(TITLE(title), relationshipBonus)
-      }
-    }
-
-    CountrySource.loadMarketSharesByCountryCode(countryCode).foreach {
-      marketShares => {
-        marketShares.airlineShares.get(airline.id).foreach {
-          marketShareOfThisAirline => {
-            val percentage = BigDecimal(marketShareOfThisAirline.toDouble / marketShares.airlineShares.values.sum * 100)
-            percentage.setScale(2, BigDecimal.RoundingMode.HALF_UP)
-            val relationshipBonus : Int = percentage match {
-              case x if x >= 50 => 30
-              case x if x >= 25 => 25
-              case x if x >= 10 => 20
-              case x if x >= 5 => 15
-              case x if x >= 2 => 10
-              case x if x >= 1 => 8
-              case x if x >= 0.5 => 6
-              case x if x >= 0.1 => (x * 10).toInt
-              case _ => 1
-            }
-            factors.put(MARKET_SHARE(percentage), relationshipBonus)
-          }
-        }
-      }
-    }
-
-    //TODO delegates
-
     AirlineCountryRelationship(airline, targetCountry, factors.toMap)
+  }
+
+  val getDelegateBonusMultiplier = (country : Country) => {
+    val ratioToModelPower = (country.airportPopulation * country.income.toDouble).toLong / Computation.MODEL_COUNTRY_POWER
+    val logRatio = Math.max(0.1, Math.log10(ratioToModelPower * 100) / 2) //0.1 to 1
+    val levelMultiplier = 1 / logRatio * 0.5 // >= 0.5, inverse of logRatio : lower multiplier for more powerful country
+    Math.min(2, BigDecimal(levelMultiplier).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble)
   }
 }
 

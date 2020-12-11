@@ -47,6 +47,7 @@ function showOfficeCanvas() {
 	
 	updateAirlineDetails()
 	loadSheets();
+	updateAirlineDelegateStatus($('#officeCanvas .delegateStatus'))
 	updateChampionedCountriesDetails()
 	updateServiceFundingDetails()
 	updateAirplaneRenewalDetails()
@@ -55,38 +56,83 @@ function showOfficeCanvas() {
 	updateAirlineColorPicker()
 	updateResetAirlineInfo()
 }
+function refreshAirlineDelegateStatus($delegateStatusDiv, delegateInfo) {
+    $delegateStatusDiv.empty()
+    var availableDelegates = delegateInfo.availableCount
+
+    //delegate info
+    for (i = 0 ; i < availableDelegates; i ++) {
+        var delegateIcon = $('<img src="assets/images/icons/user-silhouette-available.png" title="Available Delegate"/>')
+        $delegateStatusDiv.append(delegateIcon)
+    }
+
+    $.each(delegateInfo.busyDelegates, function(index, busyDelegate) {
+        var delegateIcon
+        if (busyDelegate.completed) {
+            delegateIcon = $('<img src="assets/images/icons/user-silhouette-unavailable.png" title="' + busyDelegate.coolDown + ' week(s) cool down remaining. Previous task : ' + busyDelegate.taskDescription + '"/>')
+        } else {
+            delegateIcon = $('<img src="assets/images/icons/user-silhouette-busy.png" title="Busy with task - ' + busyDelegate.taskDescription + '"/>')
+        }
+        $delegateStatusDiv.append(delegateIcon)
+    })
+}
+
+
+function updateAirlineDelegateStatus($delegateStatusDiv, successFunction) {
+    $delegateStatusDiv.empty()
+    var airlineId = activeAirline.id
+
+	$.ajax({
+		type: 'GET',
+		url: "delegates/airline/" + activeAirline.id,
+		contentType: 'application/json; charset=utf-8',
+		dataType: 'json',
+	    success: function(delegateInfo) {
+	        refreshAirlineDelegateStatus($delegateStatusDiv, delegateInfo)
+
+            if (successFunction) {
+                successFunction(delegateInfo)
+            }
+	    },
+        error: function(jqXHR, textStatus, errorThrown) {
+	            console.log(JSON.stringify(jqXHR));
+	            console.log("AJAX error: " + textStatus + ' : ' + errorThrown);
+	    }
+	});
+}
 
 function updateAirlineBases() {
     $('#officeCanvas .bases').children('.table-row').remove()
 
     var airlineId = activeAirline.id
-    	var url = "airlines/" + airlineId + "/link-limits"
+    	var url = "airlines/" + airlineId + "/office-capacity"
         $.ajax({
     		type: 'GET',
     		url: url,
     	    contentType: 'application/json; charset=utf-8',
     	    dataType: 'json',
-    	    success: function(linkLimits) {
+    	    success: function(officeCapacity) {
     	    	 $(activeAirline.baseAirports).each(function(index, base) {
                     var row = $("<div class='table-row'></div>")
                     if (base.headquarter) {
-                        row.append($("<div class='cell'><img src='assets/images/icons/building-hedge.png' style='vertical-align:middle;'><span>(" + base.scale + ")</span></div><div class='cell'>" + getCountryFlagImg(base.countryCode) + getAirportText(base.city, base.airportCode) + "</div>"))
+                        row.append($("<div class='cell'><img src='assets/images/icons/Ring-hedge.png' style='vertical-align:middle;'><span>(" + base.scale + ")</span></div><div class='cell'>" + getCountryFlagImg(base.countryCode) + getAirportText(base.city, base.airportCode) + "</div>"))
 
                     } else {
                         row.append($("<div class='cell'><img src='assets/images/icons/building-low.png' style='vertical-align:middle;'><span>(" + base.scale + ")</span></div><div class='cell'>" + getCountryFlagImg(base.countryCode) + getAirportText(base.city, base.airportCode) + "</div>"))
                     }
-                    var limitInfo = linkLimits[base.airportId]
-                    row.append($("<div class='cell'>" + limitInfo.linkLimit + "</div>"))
-                    if (limitInfo.linkLimit < limitInfo.linkCount) {
-                        row.append($("<div class='cell fatal'>" + limitInfo.linkCount + "</div>"))
+                    var capacityInfo = officeCapacity[base.airportId]
+                    row.append($("<div class='cell'>" + capacityInfo.delegateCapacity + "</div>"))
+                    row.append($("<div class='cell'>" + capacityInfo.staffCapacity + "</div>"))
+                    if (capacityInfo.staffCapacity < capacityInfo.staffRequired) {
+                        row.append($("<div class='cell fatal'>" + capacityInfo.staffRequired + "</div>"))
                     } else {
-                        row.append($("<div class='cell'>" + limitInfo.linkCount + "</div>"))
+                        row.append($("<div class='cell'>" + capacityInfo.staffRequired + "</div>"))
                     }
 
-                    if (limitInfo.overtimeCompensation == 0) {
+                    if (capacityInfo.overtimeCompensation == 0) {
                         row.append($("<div class='cell'>-</div>"))
                      } else {
-                        row.append($("<div class='cell'>$" + commaSeparateNumber(limitInfo.overtimeCompensation) + "</div>"))
+                        row.append($("<div class='cell'>$" + commaSeparateNumber(capacityInfo.overtimeCompensation) + "</div>"))
                      }
                     if (base.headquarter) {
                         $('#officeCanvas .bases .table-header').after(row)
@@ -130,9 +176,7 @@ function updateAirlineDetails() {
 	    	$('#fleetSize').text(airline.fleetSize)
 	    	$('#fleetAge').text(getYearMonthText(airline.fleetAge))
 	    	$('#assets').text('$' + commaSeparateNumber(airline.assets))
-	    	$('#domesticLinkCount').text(airline.domesticLinkCount)
-	    	$('#regionalLinkCount').text(airline.regionalLinkCount)
-	    	$('#intercontinentalLinkCount').text(airline.intercontinentalLinkCount + "/" + airline.intercontinentalLinkMax)
+	    	$('#officeCanvas .linkCount').text(airline.linkCount)
 	    },
         error: function(jqXHR, textStatus, errorThrown) {
 	            console.log(JSON.stringify(jqXHR));
@@ -769,6 +813,7 @@ function resetAirline(keepAssets) {
 	    dataType: 'json',
 	    success: function() {
 	    	updateAllPanels(activeAirline.id)
+	    	selectedLink = undefined
 	    	showWorldMap()
 	    },
         error: function(jqXHR, textStatus, errorThrown) {

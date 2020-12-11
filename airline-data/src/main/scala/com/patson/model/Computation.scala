@@ -1,16 +1,20 @@
 package com.patson.model
 
 import com.patson.model.airplane._
-import com.patson.data.CycleSource
+import com.patson.data.{AirlineSource, AirplaneSource, AllianceSource, BankSource, CountrySource, CycleSource, OilSource}
 import com.patson.Util
-import com.patson.data.AllianceSource
-import com.patson.data.AirplaneSource
-import com.patson.data.AirlineSource
-import com.patson.data.BankSource
-import com.patson.data.OilSource
 import com.patson.util.{AirlineCache, AllianceRankingUtil}
 
 object Computation {
+  val MODEL_COUNTRY_CODE = "US"
+  val MODEL_COUNTRY_POWER : Double = CountrySource.loadCountryByCode(MODEL_COUNTRY_CODE) match {
+    case Some(country) =>
+      country.airportPopulation.toDouble * country.income
+    case None =>
+      println(s"Cannot find $MODEL_COUNTRY_CODE to compute model power")
+      1
+  }
+
   //distance vs max speed
   val speedLimits = List((300, 350), (400, 500), (400, 700))  
   def calculateDuration(airplaneModel: Model, distance : Int) = {
@@ -81,8 +85,10 @@ object Computation {
         LONG_HAUL_INTERNATIONAL
       }
     } else {
-      if (distance <= 4000) {
+      if (distance <= 2000) {
         SHORT_HAUL_INTERCONTINENTAL
+      } else if (distance <= 5000) {
+        MEDIUM_HAUL_INTERCONTINENTAL
       } else if (distance <= 12000) {
         LONG_HAUL_INTERCONTINENTAL
       } else {
@@ -91,17 +97,6 @@ object Computation {
     }
   }
   
-  import FlightCategory._
-  def getFlightCategory(fromAirport : Airport, toAirport : Airport) : FlightCategory.Value = {
-    val distance = calculateDistance(fromAirport, toAirport)
-    if (fromAirport.countryCode == toAirport.countryCode) {
-      DOMESTIC
-    } else if (fromAirport.zone == toAirport.zone || distance <= 1000) {
-      REGIONAL
-    } else {
-      INTERCONTINENTAL
-    }
-  }
 
   /**
    * Returns a normalized income level, should be greater than 0
@@ -155,9 +150,7 @@ object Computation {
     // 9th : 4
     // 10th : 2
     
-    //pop 97499995 income 54629
-    val modelPower = 97499995L * 54629L
-    val ratioToModelPower = country.airportPopulation * country.income.toDouble / modelPower
+    val ratioToModelPower = country.airportPopulation * country.income.toDouble / MODEL_COUNTRY_POWER
     
     val boost = math.log10(ratioToModelPower * 100) / 2 * reputationBoostTop10(ranking)
     
@@ -188,7 +181,7 @@ object Computation {
   }
   
   val MAX_FREQUENCY_ABSOLUTE_BASE = 30
-  def getMaxFrequencyAbsolute(airline : Airline) : Int = {
+  def getMaxFrequencyThreshold(airline : Airline) : Int = {
      AllianceSource.loadAllianceMemberByAirline(airline) match {
        case Some(allianceMember) => {
          if (allianceMember.role != AllianceRole.APPLICANT) {
@@ -220,7 +213,7 @@ object Computation {
   case class ResetAmountInfo(airplanes : Long, bases : Long, loans : Long, oilContracts : Long, existingBalance : Long) {
     val overall = airplanes + bases + loans + oilContracts + existingBalance
   }
-  
+
 //  def getAirplaneConstructionTime(model : Model, existingConstruction : Int) : Int = {
 //    model.constructionTime + (existingConstruction / 5) * model.constructionTime / 4 
 //  }
